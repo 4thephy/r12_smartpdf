@@ -83,25 +83,42 @@ export default function ChatInterface({ currentDoc, apiKey, onSelectPage, chatMe
           </div>
         </div>
 
-        {chatMessages.length > 0 && (
-          <button
-            onClick={handleClearHistory}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              fontSize: '0.78rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.25rem'
-            }}
-            title="대화 기록 초기화"
-          >
-            <Trash2 size={13} />
-            <span>초기화</span>
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {onOpenReportModal && (
+            <button
+              onClick={onOpenReportModal}
+              className="btn-primary"
+              style={{
+                fontSize: '0.78rem',
+                padding: '0.35rem 0.75rem',
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #d946ef 100%)',
+                boxShadow: '0 0 10px rgba(217, 70, 239, 0.4)'
+              }}
+            >
+              <span>📊 요약 리포트 & 인쇄</span>
+            </button>
+          )}
+
+          {chatMessages.length > 0 && (
+            <button
+              onClick={handleClearHistory}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                fontSize: '0.78rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem'
+              }}
+              title="대화 기록 초기화"
+            >
+              <Trash2 size={13} />
+              <span>초기화</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Suggested Quick Action Chips */}
