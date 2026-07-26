@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Trash2, ArrowUpRight, HelpCircle, Layers, ListChecks } from 'lucide-react';
 import { askPdfQuestion } from '../utils/qaEngine';
 
-export default function ChatInterface({ currentDoc, apiKey, onSelectPage, chatMessages, setChatMessages }) {
+export default function ChatInterface({ currentDoc, apiKey, onSelectPage, chatMessages, setChatMessages, onOpenReportModal }) {
   const [inputQuery, setInputQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const chatEndRef = useRef(null);
@@ -113,6 +113,12 @@ export default function ChatInterface({ currentDoc, apiKey, onSelectPage, chatMe
         gap: '0.5rem',
         overflowX: 'auto'
       }}>
+        <QuickChip
+          icon={<Sparkles size={12} color="#f472b6" />}
+          label="📊 종합 리포트 생성 & 인쇄"
+          onClick={onOpenReportModal}
+          disabled={isLoading}
+        />
         <QuickChip
           icon={<Sparkles size={12} color="#818cf8" />}
           label="⚡ 3줄 핵심 요약"

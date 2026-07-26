@@ -1,7 +1,7 @@
 import React from 'react';
-import { FileText, Key, Upload, CheckCircle2 } from 'lucide-react';
+import { FileText, Key, Upload, CheckCircle2, FileSpreadsheet } from 'lucide-react';
 
-export default function Header({ currentDoc, onNewUpload, onOpenApiKeyModal, apiKey }) {
+export default function Header({ currentDoc, onNewUpload, onOpenApiKeyModal, apiKey, onOpenReportModal }) {
   return (
     <header className="glass-panel" style={{ borderRadius: '0 0 16px 16px', borderTop: 'none', padding: '1rem 1.5rem', marginBottom: '1.5rem' }}>
       <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
@@ -64,6 +64,23 @@ export default function Header({ currentDoc, onNewUpload, onOpenApiKeyModal, api
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {/* AI Report Button */}
+          {currentDoc && (
+            <button
+              onClick={onOpenReportModal}
+              className="btn-primary"
+              style={{
+                fontSize: '0.85rem',
+                padding: '0.5rem 1rem',
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #d946ef 100%)',
+                boxShadow: '0 0 15px rgba(217, 70, 239, 0.3)'
+              }}
+            >
+              <FileSpreadsheet size={15} />
+              <span>📊 요약 리포트 생성</span>
+            </button>
+          )}
+
           {/* API Key Settings Button */}
           <button
             onClick={onOpenApiKeyModal}
@@ -71,23 +88,23 @@ export default function Header({ currentDoc, onNewUpload, onOpenApiKeyModal, api
             style={{ fontSize: '0.85rem', padding: '0.5rem 0.9rem' }}
           >
             <Key size={15} color={apiKey ? '#34d399' : '#a7f3d0'} />
-            <span>API 키 설정</span>
+            <span>API 키</span>
             {apiKey ? (
               <span className="badge badge-emerald" style={{ marginLeft: '0.25rem', padding: '0.15rem 0.4rem', fontSize: '0.65rem' }}>
                 <CheckCircle2 size={10} style={{ marginRight: '2px' }} /> Gemini
               </span>
             ) : (
               <span className="badge badge-purple" style={{ marginLeft: '0.25rem', padding: '0.15rem 0.4rem', fontSize: '0.65rem' }}>
-                로컬 엔진
+                로컬
               </span>
             )}
           </button>
 
           {/* New Document Button */}
           {currentDoc && (
-            <button onClick={onNewUpload} className="btn-primary" style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}>
+            <button onClick={onNewUpload} className="btn-secondary" style={{ fontSize: '0.85rem', padding: '0.5rem 0.9rem' }}>
               <Upload size={15} />
-              <span>새 PDF 업로드</span>
+              <span>새 PDF</span>
             </button>
           )}
         </div>
@@ -96,3 +113,4 @@ export default function Header({ currentDoc, onNewUpload, onOpenApiKeyModal, api
     </header>
   );
 }
+

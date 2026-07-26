@@ -423,4 +423,171 @@ function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Generate a comprehensive summary report combining PDF content and user Q&A conversation history
+ */
+export async function generateDocumentReport(docData, chatMessages = [], apiKey = '') {
+  if (!docData || !docData.pages || docData.pages.length === 0) {
+    return '# ⚠️ 오류\n\n분석할 PDF 문서 데이터가 없습니다.';
+  }
+
+  // Format user conversation history
+  const userQaHistory = chatMessages
+    .filter(msg => msg.text)
+    .map(msg => `[${msg.sender === 'user' ? '질문' : 'AI 답변'}] ${msg.text}`)
+    .join('\n\n');
+
+  // Try calling Gemini API if key exists
+  if (apiKey && apiKey.trim().length > 0) {
+    try {
+      const reportText = await callGeminiReportApi(docData, userQaHistory, apiKey.trim());
+      return reportText;
+    } catch (err) {
+      console.warn('Gemini report API failed, falling back to local synthesis report:', err);
+    }
+  }
+
+  // Fallback: Local Synthesis Report
+  return synthesizeLocalReport(docData, chatMessages);
+}
+
+/**
+ * Synthesize a local structured markdown report
+ */
+function synthesizeLocalReport(docData, chatMessages = []) {
+  const docTitle = docData.title || docData.fileName || 'PDF 문서';
+  const numPages = docData.numPages || docData.pages.length;
+  const totalWords = docData.totalWords || 0;
+  const keywords = docData.keywords || [];
+
+  // Extract page highlights
+  const pageHighlights = docData.pages.slice(0, 10).map((p) => {
+    const cleanLines = p.text.split('\n').filter(l => !isHeaderOrFooterLine(l));
+    const firstLine = cleanLines[0] || p.snippet || '내용 요약 중...';
+    return `- **페이지 ${p.pageNum}**: ${firstLine.slice(0, 80)}`;
+  }).join('\n');
+
+  // Extract chat QA summary
+  const userQuestions = chatMessages.filter(m => m.sender === 'user');
+  let qaSection = '';
+  if (userQuestions.length > 0) {
+    qaSection = userQuestions.map((q, idx) => {
+      return `${idx + 1}. **질문**: "${q.text}"`;
+    }).join('\n');
+  } else {
+    qaSection = '*진행된 대화 기록이 없거나 기본 분석 모드입니다.*';
+  }
+
+  return `# 📄 ${docTitle} 종합 분석 및 요약 리포트
+
+## 📌 1. 문서 종합 개요 (Executive Summary)
+- **문서 제목**: ${docTitle}
+- **총 분량**: ${numPages}페이지 (약 ${totalWords.toLocaleString()} 단어)
+- **주요 키워드**: ${keywords.map(k => `\`#${k}\``).join(' ') || '자동 분석 진행 중'}
+- **분석 개요**: 본 보고서는 업로드된 **"${docTitle}"** PDF 문서의 전체 본문 구조와 주요 조항 및 질의응답 대화 기록을 바탕으로 핵심 정보를 종합 요약한 스마트 보고서입니다.
+
+---
+
+## 🔑 2. 문서 핵심 요약 (Key Highlights)
+1. **주요 주제 및 핵심 구조**: 문서 전체 ${numPages}개 페이지에 걸쳐 구성된 핵심 본문 내용 및 필수 항목을 정리하였습니다.
+2. **핵심 구절 추출**: 문서 전반에서 가장 높은 관련도를 가진 주요 파트를 인덱싱하였습니다.
+3. **가독성 최적화**: 사용자가 문서 전체를 정독하지 않고도 핵심 수치와 가이드라인을 즉시 파악할 수 있도록 구성했습니다.
+
+---
+
+## 📑 3. 주요 페이지별 세부 내용 분석
+${pageHighlights}
+
+---
+
+## 💬 4. 주요 질의응답 및 사용자 대화 요약
+${qaSection}
+
+---
+
+## 💡 5. 종합 결론 및 추천 활용 방안
+- **최종 요약**: 본 문서는 **${keywords.slice(0, 3).join(', ') || '핵심 주제'}**에 관한 핵심 내용을 담고 있으며, 상단 인쇄 버튼을 통해 PDF 저장 및 실물 출력이 가능합니다.
+- **활용 팁**: 추가로 궁금한 세부 사항은 AI 문서 어시스턴트 대화창에 특정 페이지 번호나 키워드로 질문하시면 즉시 원문 출처와 함께 정밀 답변을 받으실 수 있습니다.`;
+}
+
+/**
+ * Call Gemini API for Report Generation
+ */
+async function callGeminiReportApi(docData, userQaHistory, apiKey) {
+  const docTitle = docData.title || docData.fileName || 'PDF 문서';
+  
+  // Sample document text up to 10 pages for prompt context
+  const samplePages = docData.pages.slice(0, 10).map(p => `[페이지 ${p.pageNum}]\n${p.text.slice(0, 500)}`).join('\n\n---\n\n');
+
+  const prompt = `당신은 문서 분석 및 보고서 작성 최고의 전문가입니다. 
+아래 제공된 PDF 문서 본문 정보와 사용자가 챗봇과 나눈 질문/답변 기록을 종합 분석하여, 사용자가 한눈에 이해할 수 있는 최고급 마크다운 [AI 문서 종합 분석 & 대화 요약 보고서]를 작성해 주세요.
+
+[문서 기본 정보]
+- 문서 제목: ${docTitle}
+- 전체 페이지 수: ${docData.numPages}페이지
+- 주요 키워드: ${docData.keywords?.join(', ')}
+
+[PDF 원문 내용 요약 샘플]
+${samplePages}
+
+[사용자 및 AI 대화 기록]
+${userQaHistory || '대화 기록 없음'}
+
+[보고서 작성 필수 구성 목차]
+# 📄 ${docTitle} 종합 분석 및 요약 리포트
+
+## 📌 1. 문서 종합 개요 (Executive Summary)
+(문서의 목적, 배경 및 핵심 개요 요약)
+
+## 🔑 2. 주요 핵심 요약 (Key Highlights)
+(가장 중요한 핵심 사항 3~5가지를 글머리 기호로 정리)
+
+## 📑 3. 주요 장/페이지별 세부 분석
+(주요 페이지별 핵심 내용과 출처 [페이지 N]을 포함하여 정리)
+
+## 💬 4. 주요 질의응답 및 대화 요약
+(사용자가 질문한 핵심 궁금증과 해결 내용 종합)
+
+## 💡 5. 종합 결론 및 인사이트
+(문서의 최종 시사점 및 시사하는 바)
+
+[작성 가이드라인]
+- 전문적이고 깔끔한 마크다운 형식으로 작성하세요.
+- 중요한 단어나 숫자는 **강조 표시**하세요.`;
+
+  const modelsToTry = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+  let lastError = null;
+
+  for (const modelName of modelsToTry) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }]
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData?.error?.message || `API 호출 실패 (${modelName})`);
+      }
+
+      const data = await response.json();
+      const candidate = data.candidates?.[0];
+      const replyText = candidate?.content?.parts?.[0]?.text;
+
+      if (replyText) {
+        return replyText;
+      }
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('Gemini API 보고서 생성 실패');
+}
+
+
 

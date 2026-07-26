@@ -4,6 +4,8 @@ import FileUpload from './components/FileUpload';
 import PdfViewer from './components/PdfViewer';
 import ChatInterface from './components/ChatInterface';
 import ApiKeyModal from './components/ApiKeyModal';
+import SummaryReportModal from './components/SummaryReportModal';
+import { generateDocumentReport } from './utils/qaEngine';
 
 export default function App() {
   const [currentDoc, setCurrentDoc] = useState(null);
@@ -11,18 +13,23 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState([]);
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('smartpdf_gemini_api_key') || '');
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportContent, setReportContent] = useState('');
+  const [isReportLoading, setIsReportLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleDocumentLoaded = (docData) => {
     setCurrentDoc(docData);
     setActivePage(1);
     setChatMessages([]);
+    setReportContent('');
   };
 
   const handleNewUpload = () => {
     setCurrentDoc(null);
     setActivePage(1);
     setChatMessages([]);
+    setReportContent('');
   };
 
   const handleSaveApiKey = (key) => {
@@ -36,7 +43,6 @@ export default function App() {
 
   const handleAskAboutPage = (pageNum) => {
     setActivePage(pageNum);
-    // Automatically switch focus or trigger chat question
     const q = `페이지 ${pageNum}의 핵심 내용과 주요 정보를 상세히 설명해 줘.`;
     setChatMessages((prev) => [
       ...prev,
@@ -48,6 +54,20 @@ export default function App() {
     ]);
   };
 
+  const handleOpenReportModal = async () => {
+    if (!currentDoc) return;
+    setIsReportModalOpen(true);
+    setIsReportLoading(true);
+    try {
+      const report = await generateDocumentReport(currentDoc, chatMessages, apiKey);
+      setReportContent(report);
+    } catch (err) {
+      setReportContent(`# ⚠️ 보고서 생성 오류\n\n${err.message}`);
+    } finally {
+      setIsReportLoading(false);
+    }
+  };
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       
@@ -57,6 +77,7 @@ export default function App() {
         onNewUpload={handleNewUpload}
         onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
         apiKey={apiKey}
+        onOpenReportModal={handleOpenReportModal}
       />
 
       {/* Main Content Area */}
@@ -96,6 +117,7 @@ export default function App() {
                 onSelectPage={(pageNum) => setActivePage(pageNum)}
                 chatMessages={chatMessages}
                 setChatMessages={setChatMessages}
+                onOpenReportModal={handleOpenReportModal}
               />
             </div>
           </div>
@@ -110,6 +132,17 @@ export default function App() {
         onSaveApiKey={handleSaveApiKey}
       />
 
+      {/* AI Summary Report Modal */}
+      <SummaryReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        reportContent={reportContent}
+        isLoading={isReportLoading}
+        docTitle={currentDoc?.title || currentDoc?.fileName}
+        onRegenerateReport={handleOpenReportModal}
+      />
+
     </div>
   );
 }
+
