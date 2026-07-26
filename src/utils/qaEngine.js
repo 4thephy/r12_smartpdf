@@ -13,10 +13,15 @@ export async function askPdfQuestion(question, docData, apiKey = '') {
   // 1. Retrieve top matching context pages
   const relevantPages = searchRelevantPages(question, docData.pages);
 
-  // 2. If API Key exists, try calling Gemini API
+  // 2. If API Key exists, try calling Gemini API with rich context
   if (apiKey && apiKey.trim().length > 0) {
     try {
-      const geminiAnswer = await callGeminiApi(question, relevantPages, docData.title, apiKey.trim());
+      // For Gemini, send expanded context (up to 7 top pages, or all pages if total <= 15)
+      const apiPages = docData.pages.length <= 15
+        ? docData.pages
+        : getExpandedPages(relevantPages, docData.pages, 7);
+
+      const geminiAnswer = await callGeminiApi(question, apiPages, docData.title, apiKey.trim());
       return {
         answer: geminiAnswer,
         sources: relevantPages.map(p => p.pageNum),
@@ -37,33 +42,142 @@ export async function askPdfQuestion(question, docData, apiKey = '') {
 }
 
 /**
- * Search and rank relevant pages based on query tokens
+ * Korean Particles (조사) & Affixes list for stemming
+ */
+const KOREAN_PARTICLES = [
+  '에서의', '에대한', '에관한', '에대하여', '에관하여', '으로는', '에서는',
+  '에서', '으로', '에게', '한테', '부터', '까지', '이란', '은', '는', '이',
+  '가', '을', '를', '의', '에', '와', '과', '도', '만', '로', '란'
+];
+
+/**
+ * Common Korean question stop words (downweighted in TF scoring)
+ */
+const STOP_WORDS = new Set([
+  '내용', '내용은', '내용이', '내용을', '무엇', '무엇인가요', '무엇인가', '무엇인지',
+  '어떻게', '설명', '설명해', '설명해줘', '알려줘', '알려주세요', '정리', '정리해줘',
+  '뜻', '의미', '정보', '관한', '대한', '대해', '있어', '있는', '어떤', '문서',
+  '페이지', '관하여', '대하여', '대해서', '확인', '요청', '제시'
+]);
+
+/**
+ * Remove Korean particles from the end of a word
+ */
+function stripKoreanParticle(word) {
+  let cleaned = word;
+  for (const particle of KOREAN_PARTICLES) {
+    if (cleaned.length > particle.length + 1 && cleaned.endsWith(particle)) {
+      cleaned = cleaned.slice(0, -particle.length);
+      break;
+    }
+  }
+  return cleaned;
+}
+
+/**
+ * Extract law article numbers and patterns like 제1조, 제 1 조, 1조, 제1장, 제1항
+ */
+function extractArticlePatterns(query) {
+  const patterns = [];
+  
+  // Match "제1조", "제 1 조", "제1조의2", "1조"
+  const artMatches = query.match(/제?\s*(\d+(?:의\d+)?)\s*조/g);
+  if (artMatches) {
+    artMatches.forEach(m => {
+      const numMatch = m.match(/\d+(?:의\d+)?/);
+      if (numMatch) {
+        const num = numMatch[0];
+        patterns.push({
+          raw: m.replace(/\s+/g, ''),
+          artNum: num,
+          regex: new RegExp(`(제\\s*${num}\\s*조|\\b${num}\\s*조)`, 'i')
+        });
+      }
+    });
+  }
+
+  // Match "제1장", "제1절", "제1항"
+  const sectionMatches = query.match(/제?\s*(\d+)\s*([장절항관])/g);
+  if (sectionMatches) {
+    sectionMatches.forEach(m => {
+      const numMatch = m.match(/\d+/);
+      const unitMatch = m.match(/[장절항관]/);
+      if (numMatch && unitMatch) {
+        patterns.push({
+          raw: m.replace(/\s+/g, ''),
+          artNum: numMatch[0],
+          regex: new RegExp(`제\\s*${numMatch[0]}\\s*${unitMatch[0]}`, 'i')
+        });
+      }
+    });
+  }
+
+  return patterns;
+}
+
+/**
+ * Search and rank relevant pages based on query tokens, article patterns, and stemming
  */
 function searchRelevantPages(query, pages) {
-  const queryTokens = query
-    .toLowerCase()
-    .replace(/[^\w\s가-힣]/g, '')
-    .split(/\s+/)
-    .filter(t => t.length >= 2);
+  const articlePatterns = extractArticlePatterns(query);
 
-  if (queryTokens.length === 0) {
-    return pages.slice(0, 3);
-  }
+  // Raw tokenization
+  const rawTokens = query
+    .toLowerCase()
+    .replace(/[^\w\s가-힣]/g, ' ')
+    .split(/\s+/)
+    .filter(t => t.length >= 1);
+
+  // Processed tokens with particle stemming
+  const processedTokens = [];
+  rawTokens.forEach(t => {
+    if (t.length >= 2) {
+      processedTokens.push(t);
+      const stemmed = stripKoreanParticle(t);
+      if (stemmed.length >= 2 && stemmed !== t) {
+        processedTokens.push(stemmed);
+      }
+    }
+  });
+
+  const uniqueTokens = Array.from(new Set(processedTokens));
 
   const scoredPages = pages.map(page => {
     const pageText = page.text.toLowerCase();
     let score = 0;
 
-    queryTokens.forEach(token => {
-      // Frequency score
-      const matches = (pageText.match(new RegExp(escapeRegExp(token), 'g')) || []).length;
-      score += matches * 2;
-
-      // Title/heading match bonus
-      if (pageText.slice(0, 80).includes(token)) {
-        score += 5;
+    // 1. Article / Section Pattern Match (MASSIVE BONUS)
+    articlePatterns.forEach(ap => {
+      if (ap.regex.test(page.text)) {
+        score += 100;
+        // Additional bonus if article appears near page start / heading
+        if (ap.regex.test(page.text.slice(0, 150))) {
+          score += 50;
+        }
       }
     });
+
+    // 2. Keyword & Token Matching with IDF/Stopword weighting
+    uniqueTokens.forEach(token => {
+      const isStop = STOP_WORDS.has(token);
+      const weight = isStop ? 0.2 : 3.0;
+
+      // Count occurrences
+      const reg = new RegExp(escapeRegExp(token), 'gi');
+      const matches = (pageText.match(reg) || []).length;
+      score += matches * weight;
+
+      // Heading bonus
+      if (!isStop && pageText.slice(0, 100).includes(token)) {
+        score += 8.0;
+      }
+    });
+
+    // 3. Exact query substring bonus
+    const cleanQuery = query.replace(/[^\w\s가-힣]/g, '').trim().toLowerCase();
+    if (cleanQuery.length >= 3 && pageText.includes(cleanQuery)) {
+      score += 30;
+    }
 
     return { page, score };
   });
@@ -76,8 +190,26 @@ function searchRelevantPages(query, pages) {
     return pages.slice(0, 2);
   }
 
-  // Filter top matches (max 3 pages)
-  return scoredPages.filter(sp => sp.score > 0).slice(0, 3).map(sp => sp.page);
+  // Return top matching pages (max 3 pages for local display)
+  const topMatches = scoredPages.filter(sp => sp.score > 0).slice(0, 3).map(sp => sp.page);
+
+  return topMatches.length > 0 ? topMatches : pages.slice(0, 2);
+}
+
+/**
+ * Expand context pages by adding adjacent pages if needed
+ */
+function getExpandedPages(topPages, allPages, maxPages = 5) {
+  const selectedPageNums = new Set(topPages.map(p => p.pageNum));
+
+  // Add adjacent pages for continuity
+  topPages.forEach(p => {
+    if (p.pageNum > 1) selectedPageNums.add(p.pageNum - 1);
+    if (p.pageNum < allPages.length) selectedPageNums.add(p.pageNum + 1);
+  });
+
+  const expanded = allPages.filter(p => selectedPageNums.has(p.pageNum));
+  return expanded.slice(0, maxPages);
 }
 
 /**
@@ -112,25 +244,39 @@ function synthesizeLocalAnswer(query, topPages, docData) {
     };
   }
 
-  // General Q&A synthesis
-  let responseText = `업로드하신 **"${docData.title}"** 문서에서 질문 관련 내용을 찾았습니다:\n\n`;
+  // Extract query keywords (excluding stop words)
+  const articlePatterns = extractArticlePatterns(query);
+  const searchTerms = query
+    .toLowerCase()
+    .replace(/[^\w\s가-힣]/g, ' ')
+    .split(/\s+/)
+    .map(stripKoreanParticle)
+    .filter(t => t.length >= 2 && !STOP_WORDS.has(t));
 
-  topPages.forEach((p, index) => {
-    // Find sentences with matching keywords
-    const sentences = p.text.split(/(?<=[.!?])\s+/);
-    const relevantSentences = sentences.filter(s => {
+  let responseText = `업로드하신 **"${docData.title}"** 문서에서 질문 관련 핵심 구절을 찾았습니다:\n\n`;
+
+  topPages.forEach((p) => {
+    // Find sentences with matching keywords or article patterns
+    const sentences = p.text.split(/(?<=[.!?\n])\s+/).filter(s => s.trim().length > 0);
+    
+    let relevantSentences = sentences.filter(s => {
       const sLower = s.toLowerCase();
-      return query.split(/\s+/).some(term => term.length >= 2 && sLower.includes(term.toLowerCase()));
+      // Check article pattern
+      if (articlePatterns.some(ap => ap.regex.test(s))) return true;
+      // Check search terms
+      return searchTerms.some(term => sLower.includes(term));
     });
 
-    const highlightText = relevantSentences.length > 0 
-      ? relevantSentences.slice(0, 2).join(' ')
-      : p.text.slice(0, 180) + '...';
+    if (relevantSentences.length === 0) {
+      relevantSentences = sentences.slice(0, 3);
+    }
+
+    const highlightText = relevantSentences.slice(0, 3).join(' ');
 
     responseText += `📌 **출처: 페이지 ${p.pageNum}**\n> "${highlightText.trim()}"\n\n`;
   });
 
-  responseText += `\n추가 질문이 있으시면 언제든지 물어보세요!`;
+  responseText += `💡 *상단 출처 버튼이나 PDF 뷰어에서 해당 페이지로 이동하여 전체 원문을 보실 수 있습니다.*`;
 
   return {
     answer: responseText,
@@ -156,8 +302,9 @@ ${contextStr}
 ${question}
 
 [답변 작성 가이드라인]
-1. 답변 내에서 핵심 정보를 인용할 때 반드시 **[페이지 N 출처]** 형태로 출처 페이지 번호를 밝혀주세요.
-2. 불필요한 추측은 피하고 문서에 명시된 사실을 기반으로 명확하고 깔끔한 마크다운 형식(글머리 기호, 강조 표시 등)으로 작성하세요.`;
+1. 사용자가 특정 조항(예: 제1조, 제2조 등)이나 특정 주제를 물어보는 경우, 본문에 있는 정확한 내용과 조항 전문/핵심 구절을 상세히 설명하세요.
+2. 답변 내에서 핵심 정보를 인용할 때 반드시 **[페이지 N 출처]** 형태로 출처 페이지 번호를 명확히 밝혀주세요.
+3. 불필요한 추측은 피하고 문서에 명시된 사실을 기반으로 명확하고 깔끔한 마크다운 형식(글머리 기호, 강조 표시 등)으로 작성하세요.`;
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
@@ -188,3 +335,4 @@ ${question}
 function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+

@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Key, Upload, Sparkles, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { FileText, Key, Upload, CheckCircle2 } from 'lucide-react';
 
 export default function Header({ currentDoc, onNewUpload, onOpenApiKeyModal, apiKey }) {
   return (

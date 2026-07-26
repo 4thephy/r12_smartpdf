@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, FileText, Trash2, ArrowUpRight, HelpCircle, Layers, ListChecks } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Trash2, ArrowUpRight, HelpCircle, Layers, ListChecks } from 'lucide-react';
 import { askPdfQuestion } from '../utils/qaEngine';
 
 export default function ChatInterface({ currentDoc, apiKey, onSelectPage, chatMessages, setChatMessages }) {

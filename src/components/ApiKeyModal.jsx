@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Key, X, ExternalLink, ShieldCheck, Sparkles, Check } from 'lucide-react';
+import { Key, X, ExternalLink, ShieldCheck, Check } from 'lucide-react';
 
 export default function ApiKeyModal({ isOpen, onClose, apiKey, onSaveApiKey }) {
   const [inputKey, setInputKey] = useState(apiKey || '');

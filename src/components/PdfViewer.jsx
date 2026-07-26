@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, BookOpen, Tag, MessageSquarePlus, Copy, Check, ChevronRight } from 'lucide-react';
+import { Search, BookOpen, Tag, MessageSquarePlus, Copy, Check } from 'lucide-react';
 
 export default function PdfViewer({ currentDoc, activePage, onSelectPage, onAskAboutPage }) {
   const [searchTerm, setSearchTerm] = useState('');

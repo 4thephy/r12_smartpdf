@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UploadCloud, FileText, Sparkles, CheckCircle2, Shield, Zap, Search, HelpCircle } from 'lucide-react';
+import { UploadCloud, FileText, Sparkles, Shield, Zap, Search, HelpCircle } from 'lucide-react';
 import { parsePdfFile, getSamplePdfData } from '../utils/pdfParser';
 
 export default function FileUpload({ onDocumentLoaded, setIsLoading, isLoading }) {
