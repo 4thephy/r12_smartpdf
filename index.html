@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartPDF AI - PDF 문서 분석 및 지능형 Q&A 시스템</title>
+  <meta name="description" content="PDF 문서를 업로드하여 실시간으로 내용을 파싱하고 출처 페이지 추적 답변 및 요약을 제공하는 스마트 AI 웹 앱입니다." />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- PDF.js Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  </script>
+
+  <!-- React 18 & Babel Standalone -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Lucide Icons UMD -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    :root {
+      --bg-primary: #090d16;
+      --bg-secondary: #0f172a;
+      --bg-card: rgba(30, 41, 59, 0.7);
+      --bg-card-hover: rgba(51, 65, 85, 0.8);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-highlight: rgba(99, 102, 241, 0.4);
+
+      --accent-primary: #6366f1;
+      --accent-primary-hover: #4f46e5;
+      --accent-purple: #8b5cf6;
+      --accent-cyan: #06b6d4;
+      --accent-emerald: #10b981;
+      --accent-rose: #f43f5e;
+
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-sub: #cbd5e1;
+
+      --glow-primary: 0 0 25px rgba(99, 102, 241, 0.25);
+      --glow-purple: 0 0 25px rgba(139, 92, 246, 0.25);
+      --radius-lg: 16px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      min-height: 100vh;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.12) 0px, transparent 50%),
+        radial-gradient(at 50% 100%, rgba(6, 182, 212, 0.08) 0px, transparent 50%);
+    }
+
+    h1, h2, h3, h4, .font-heading {
+      font-family: 'Outfit', sans-serif;
+    }
+
+    .glass-panel {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+    }
+
+    .glass-panel-interactive {
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .glass-panel-interactive:hover {
+      border-color: var(--border-highlight);
+      box-shadow: var(--glow-primary);
+      transform: translateY(-2px);
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.5);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.25);
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(99, 102, 241, 0.6);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 0.8; }
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .animate-fade-in { animation: fadeIn 0.35s ease-out forwards; }
+    .animate-pulse-glow { animation: pulseGlow 2s infinite ease-in-out; }
+
+    .gradient-text {
+      background: linear-gradient(135deg, #818cf8 0%, #c084fc 50%, #38bdf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-purple) 100%);
+      color: #ffffff;
+      border: none;
+      border-radius: var(--radius-md);
+      padding: 0.65rem 1.25rem;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+    }
+    .btn-primary:hover {
+      opacity: 0.92;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 0.65rem 1.25rem;
+      font-weight: 500;
+      font-size: 0.9rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-indigo {
+      background: rgba(99, 102, 241, 0.15);
+      color: #a5b4fc;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+    .badge-emerald {
+      background: rgba(16, 185, 129, 0.15);
+      color: #6ee7b7;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .badge-purple {
+      background: rgba(139, 92, 246, 0.15);
+      color: #c084fc;
+      border: 1px solid rgba(139, 92, 246, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // --- ICON WRAPPERS ---
+    const Icon = ({ name, size = 18, color = "currentColor", style = {} }) => {
+      const iconRef = useRef(null);
+      useEffect(() => {
+        if (iconRef.current && window.lucide) {
+          iconRef.current.innerHTML = '';
+          const iconElem = window.lucide.createIcons({
+            icons: { [name]: true },
+            attrs: { width: size, height: size, stroke: color }
+          });
+        }
+      }, [name, size, color]);
+      return <span ref={iconRef} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', ...style }} />;
+    };
+
+    // --- SAMPLE DEMO PDF DATA ---
+    function getSamplePdfData() {
+      const pages = [
+        {
+          pageNum: 1,
+          text: `2026 AI 및 디지털 혁신 보고서\n\n1. 서론 및 종합 개요\n본 보고서는 2026년 최신 인공지능(AI) 기술과 디지털 파괴적 혁신 트렌드를 종합적으로 분석합니다.\n지난 수년간 생성형 AI 및 LLM(대형 언어 모델) 기술은 기업의 데이터 처리 방식과 일하는 방식을 혁명적으로 변화시켰습니다.\n특히 PDF 문서 처리, RAG(검색 증강 생성), 에이전틱 AI(Agentic AI) 시스템은 사용자가 방대한 지식 베이스에서 필요한 정보를 초 단위로 검색하고 활용할 수 있도록 돕고 있습니다.\n\n주요 하이라이트:\n- 데이터 파싱 정확도 98% 향상\n- 기업 생산성 평균 45% 증가\n- 지능형 문서 검색 시스템 도입률 300% 증가`,
+          wordCount: 120,
+          snippet: '2026 AI 및 디지털 혁신 보고서 - 서론 및 종합 개요...'
+        },
+        {
+          pageNum: 2,
+          text: `2. 스마트 PDF 분석 및 RAG 기술 동향\n\nPDF(Portable Document Format)는 비즈니스 환경에서 가장 널리 사용되는 문서 포맷 중 하나입니다.\n그러나 전통적인 텍스트 검색 기술은 구조화되지 않은 PDF 내부의 핵심 답변을 정밀하게 추출하는 데 한계가 있었습니다.\n\n2026년 최신 Smart RAG 아키텍처는 다음 3단계 알고리즘을 사용합니다:\n1) 문단 및 페이지 단위 고성능 토큰화 (Chunking Engine)\n2) 의미론적 맥락 유사도 분석 (Semantic Context Scoring)\n3) 출처 매칭 및 하이라이팅 (Citation & Page Verification)\n\n이를 통해 사용자가 "이 보고서의 결론이 뭐야?"라고 질문하면, 정확한 페이지 번호와 해당 구절 원문을 함께 제공할 수 있습니다.`,
+          wordCount: 135,
+          snippet: '2. 스마트 PDF 분석 및 RAG 기술 동향...'
+        },
+        {
+          pageNum: 3,
+          text: `3. 클라우드 아키텍처 및 보안 가이드라인\n\n기업용 데이터 분석 앱 구축 시 보안과 개인정보 보호는 최우선 과제입니다.\n보고서 조사 결과에 따르면, 전체 금융 및 의료 기관의 82%가 브라우저 로컬 파싱 방식(Client-side Parsing)을 선호합니다.\n\n주요 보안 수칙:\n1. 외부 서버로 원본 파일 전송 최소화 (로컬 인덱싱 권장)\n2. API 키 관리 시 엔드포인트 암호화 및 LocalStorage 안심 보관\n3. 실시간 토큰 사용량 제어 및 데이터 로깅 최소화\n\n이를 구현함으로서 기업은 민감한 기밀 문서나 고객 데이터를 외부 유출 걱정 없이 안전하게 다룰 수 있습니다.`,
+          wordCount: 110,
+          snippet: '3. 클라우드 아키텍처 및 보안 가이드라인...'
+        },
+        {
+          pageNum: 4,
+          text: `4. 생성형 AI 도입에 따른 기대 효과 및 경제적 영향\n\nAI 도입 기업 500개사를 대상으로 한 실증 분석 결과는 다음과 같습니다:\n\n- 업무 처리 시간 단축: 보고서 작성 시간 평균 68% 감소 (주당 12시간 절약)\n- 오류율 감소: 수동 데이터 입력을 자동화함으로써 오류 발생률 92% 하락\n- 만족도 상승: 직원들의 업무 만족도 4.8 / 5.0 점 기록\n\n결론적으로, 지능형 PDF 탐색기 및 AI 조수를 도입한 조직은 경쟁사 대비 평균 3.2배 빠르게 정보 의사결정을 내릴 수 있었습니다.`,
+          wordCount: 115,
+          snippet: '4. 생성형 AI 도입에 따른 기대 효과 및 경제적 영향...'
+        },
+        {
+          pageNum: 5,
+          text: `5. 향후 전망 및 결론\n\n2026년 이후 AI 생태계는 단순 대화형 AI를 넘어 멀티모달 자율 에이전트로 빠르게 진화할 것입니다.\n기업은 개별 문서를 읽고 답변하는 단계를 지나, 회사 전체 지식 창고와 연동되는 지능형 지식 맵을 구축해야 합니다.\n\n핵심 요약:\n1. 로컬 보안 파싱 + AI 하이브리드 추천 엔진 구축\n2. 출처 인용 중심의 투명한 QA 시스템 제공\n3. 사용자 친화적인 웹 인터페이스 및 즉각적인 인터랙션 보장`,
+          wordCount: 105,
+          snippet: '5. 향후 전망 및 결론...'
+        }
+      ];
+
+      const fullText = pages.map(p => `\n[페이지 ${p.pageNum}]\n` + p.text).join('\n');
+      const totalWords = pages.reduce((sum, p) => sum + p.wordCount, 0);
+
+      return {
+        fileName: '2026_AI_디지털_혁신_보고서_샘플.pdf',
+        fileSize: '1.2 MB',
+        title: '2026 AI 및 디지털 혁신 보고서',
+        numPages: pages.length,
+        totalWords,
+        readingTimeMin: 3,
+        pages,
+        fullText,
+        keywords: ['AI 기술', 'RAG 검색', '스마트 PDF', '클라우드 보안', '생산성 향상', '에이전틱 AI'],
+        suggestedQuestions: [
+          '이 보고서의 핵심 내용 3가지를 요약해 줘',
+          '스마트 RAG 아키텍처의 3단계는 무엇인가요?',
+          'AI 도입으로 얻은 실제 기대 효과와 경제적 영향은?',
+          '기업 보안을 위한 클라우드 가이드라인 알려줘'
+        ]
+      };
+    }
+
+    // --- PDF PARSER ---
+    async function parsePdfFile(file) {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdfDoc = await loadingTask.promise;
+
+        const numPages = pdfDoc.numPages;
+        const pages = [];
+        let fullText = '';
+        let totalWords = 0;
+
+        for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+          const page = await pdfDoc.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          
+          const pageText = textContent.items
+            .map(item => item.str)
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          const wordCount = pageText ? pageText.split(/\s+/).length : 0;
+          totalWords += wordCount;
+
+          pages.push({
+            pageNum,
+            text: pageText || `[페이지 ${pageNum} - 텍스트 없음 또는 이미지 문서]`,
+            wordCount,
+            snippet: (pageText || '').slice(0, 140) + '...'
+          });
+
+          fullText += `\n[페이지 ${pageNum}]\n` + pageText;
+        }
+
+        const metadata = await pdfDoc.getMetadata().catch(() => ({}));
+        const docTitle = metadata?.info?.Title || file.name.replace(/\.pdf$/i, '');
+
+        const words = fullText.replace(/[^\w\s가-힣]/g, ' ').split(/\s+/).filter(w => w.length >= 2);
+        const freqMap = {};
+        words.forEach(w => { freqMap[w] = (freqMap[w] || 0) + 1; });
+        const keywords = Object.entries(freqMap).sort((a,b) => b[1] - a[1]).slice(0, 6).map(e => e[0]);
+
+        return {
+          fileName: file.name,
+          fileSize: (file.size / (1024*1024)).toFixed(1) + ' MB',
+          title: docTitle,
+          numPages,
+          totalWords,
+          readingTimeMin: Math.max(1, Math.ceil(totalWords / 200)),
+          pages,
+          fullText,
+          keywords,
+          suggestedQuestions: [
+            `'${docTitle}'의 3줄 핵심 요약을 작성해 줘`,
+            '이 문서에서 가장 강조하고 있는 주요 내용이나 수치는?',
+            '문서의 결론 및 향후 시사점에 대해 정리해 줘'
+          ]
+        };
+      } catch (error) {
+        console.error('PDF Error:', error);
+        throw new Error('PDF 파일 파싱에 실패했습니다.');
+      }
+    }
+
+    // --- QA ENGINE ---
+    async function askPdfQuestion(question, docData, apiKey = '') {
+      if (!docData || !docData.pages) return { answer: '문서가 업로드되지 않았습니다.', sources: [] };
+
+      // Search relevant pages
+      const qTokens = question.toLowerCase().replace(/[^\w\s가-힣]/g, '').split(/\s+/).filter(t => t.length >= 2);
+      const scoredPages = docData.pages.map(p => {
+        let score = 0;
+        const textLower = p.text.toLowerCase();
+        qTokens.forEach(t => {
+          const count = (textLower.split(t).length - 1);
+          score += count * 2;
+        });
+        return { page: p, score };
+      }).sort((a,b) => b.score - a.score);
+
+      const topPages = (scoredPages[0].score > 0 ? scoredPages.filter(sp => sp.score > 0).slice(0, 3) : docData.pages.slice(0, 2)).map(sp => sp.page);
+      const sources = topPages.map(p => p.pageNum);
+
+      // If API key is present, try Gemini API
+      if (apiKey && apiKey.trim().length > 0) {
+        try {
+          const contextStr = topPages.map(p => `[페이지 ${p.pageNum}]\n${p.text}`).join('\n\n---\n\n');
+          const prompt = `당신은 PDF 지식 분석 AI입니다. 다음 PDF 문서를 기반으로 사용자의 질문에 한국어로 친절하게 답변하세요. 핵심 인용 시 반드시 **[페이지 N]** 출처를 포함하세요.\n\n[PDF 문서 Context]\n${contextStr}\n\n[질문]\n${question}`;
+          
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey.trim()}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+          });
+          const data = await res.json();
+          const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (reply) return { answer: reply, sources, usedApi: true };
+        } catch (e) {
+          console.warn('API Fallback:', e);
+        }
+      }
+
+      // Local Engine Fallback
+      const qLower = question.toLowerCase();
+      if (qLower.includes('요약') || qLower.includes('핵심') || qLower.includes('3줄')) {
+        const points = topPages.map((p, i) => `${i+1}. **[페이지 ${p.pageNum}]** ${p.text.split(/(?<=[.!?])\s+/)[0] || p.snippet}`).join('\n\n');
+        return { answer: `📄 **문서 핵심 요약:**\n\n${points}\n\n💡 *해당 페이지 출처 버튼을 누르면 원문 구절로 즉시 이동합니다.*`, sources, usedApi: false };
+      }
+
+      let answer = `업로드하신 **"${docData.title}"** 문서에서 질문 관련 핵심 구절을 찾았습니다:\n\n`;
+      topPages.forEach(p => {
+        const sentences = p.text.split(/(?<=[.!?])\s+/);
+        const match = sentences.find(s => qTokens.some(t => s.toLowerCase().includes(t))) || p.text.slice(0, 180);
+        answer += `📌 **출처: 페이지 ${p.pageNum}**\n> "${match.trim()}"\n\n`;
+      });
+      answer += `추가로 궁금한 사항이 있으시면 언제든지 물어보세요!`;
+
+      return { answer, sources, usedApi: false };
+    }
+
+    // --- HEADER COMPONENT ---
+    function Header({ currentDoc, onNewUpload, onOpenApiKeyModal, apiKey }) {
+      return (
+        <header className="glass-panel" style={{ borderRadius: '0 0 16px 16px', padding: '1rem 1.5rem', marginBottom: '1.5rem' }}>
+          <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(99, 102, 241, 0.4)' }}>
+                <Icon name="file-text" size={24} color="#fff" />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <h1 className="font-heading" style={{ fontSize: '1.4rem', fontWeight: '700', margin: 0 }}>
+                    SmartPDF <span className="gradient-text">AI</span>
+                  </h1>
+                  <span className="badge badge-indigo" style={{ fontSize: '0.7rem' }}>v1.2 RAG</span>
+                </div>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>PDF 문서 분석 & 지능형 질의응답 시스템</p>
+              </div>
+            </div>
+
+            {currentDoc && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(255, 255, 255, 0.04)', padding: '0.5rem 1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <Icon name="file-text" size={15} color="#818cf8" />
+                  <span style={{ fontSize: '0.85rem', fontWeight: '600', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentDoc.fileName}</span>
+                </div>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>총 <strong>{currentDoc.numPages}</strong> 페이지</span>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <button onClick={onOpenApiKeyModal} className="btn-secondary" style={{ fontSize: '0.85rem', padding: '0.5rem 0.9rem' }}>
+                <Icon name="key" size={15} color={apiKey ? '#34d399' : '#a7f3d0'} />
+                <span>API 키 설정</span>
+                {apiKey ? <span className="badge badge-emerald" style={{ fontSize: '0.65rem' }}>Gemini</span> : <span className="badge badge-purple" style={{ fontSize: '0.65rem' }}>로컬 엔진</span>}
+              </button>
+              {currentDoc && (
+                <button onClick={onNewUpload} className="btn-primary" style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}>
+                  <Icon name="upload" size={15} color="#fff" />
+                  <span>새 PDF 업로드</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </header>
+      );
+    }
+
+    // --- FILE UPLOAD COMPONENT ---
+    function FileUpload({ onDocumentLoaded, setIsLoading, isLoading }) {
+      const [dragOver, setDragOver] = useState(false);
+      const [errorMsg, setErrorMsg] = useState('');
+
+      const handleFileSelect = async (file) => {
+        if (!file) return;
+        if (file.type !== 'application/pdf' && !file.name.endsWith('.pdf')) {
+          setErrorMsg('PDF 파일만 업로드 가능합니다.');
+          return;
+        }
+        setErrorMsg('');
+        setIsLoading(true);
+        try {
+          const parsed = await parsePdfFile(file);
+          onDocumentLoaded(parsed);
+        } catch (err) {
+          setErrorMsg(err.message || 'PDF 파싱 실패');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const handleSample = () => {
+        setIsLoading(true);
+        setTimeout(() => {
+          onDocumentLoaded(getSamplePdfData());
+          setIsLoading(false);
+        }, 400);
+      };
+
+      return (
+        <div style={{ maxWidth: '900px', margin: '2rem auto', padding: '0 1rem' }} className="animate-fade-in">
+          <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
+            <span className="badge badge-indigo" style={{ marginBottom: '1rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>
+              ✨ AI 기반 문서 지능 탐색기
+            </span>
+            <h2 className="font-heading" style={{ fontSize: '2.2rem', fontWeight: '700', marginBottom: '0.75rem' }}>
+              PDF 문서를 업로드하고 <span className="gradient-text">궁금한 점을 물어보세요</span>
+            </h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '1rem', maxWidth: '600px', margin: '0 auto' }}>
+              문서 전체의 내용을 단 몇 초 만에 파싱하여 핵심 내용 요약부터 출처 페이지 명시 Q&A까지 즉시 제공합니다.
+            </p>
+          </div>
+
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files?.[0]) handleFileSelect(e.dataTransfer.files[0]); }}
+            className="glass-panel glass-panel-interactive"
+            style={{
+              padding: '3.5rem 2rem',
+              textAlign: 'center',
+              borderStyle: dragOver ? 'dashed' : 'solid',
+              borderColor: dragOver ? 'var(--accent-primary)' : 'var(--border-color)',
+              background: dragOver ? 'rgba(99, 102, 241, 0.08)' : 'var(--bg-card)'
+            }}
+          >
+            <input type="file" accept=".pdf" id="pdf-input" style={{ display: 'none' }} onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])} />
+            <label htmlFor="pdf-input" style={{ cursor: 'pointer', display: 'block' }}>
+              <div style={{ width: '72px', height: '72px', margin: '0 auto 1.25rem', borderRadius: '20px', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2))', border: '1px solid rgba(99, 102, 241, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {isLoading ? <div style={{ width: '30px', height: '30px', border: '3px solid rgba(255,255,255,0.2)', borderTopColor: '#818cf8', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> : <Icon name="upload-cloud" size={36} color="#818cf8" />}
+              </div>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                {isLoading ? 'PDF 문서 분석 진행 중...' : 'PDF 파일 끌어다 놓기 또는 클릭하여 선택'}
+              </h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '1.5rem' }}>최대 100MB 이하의 PDF 문서를 지원합니다 (.pdf)</p>
+              <button type="button" className="btn-primary" style={{ pointerEvents: 'none' }}>
+                <Icon name="file-text" size={16} color="#fff" />
+                <span>컴퓨터에서 파일 선택</span>
+              </button>
+            </label>
+            {errorMsg && <div style={{ marginTop: '1rem', color: '#f87171', background: 'rgba(239, 68, 68, 0.1)', padding: '0.5rem 1rem', borderRadius: '8px', fontSize: '0.85rem' }}>⚠️ {errorMsg}</div>}
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginRight: '0.5rem' }}>준비된 PDF 파일이 없으신가요?</span>
+            <button onClick={handleSample} disabled={isLoading} style={{ background: 'none', border: 'none', color: '#a7f3d0', fontWeight: '600', fontSize: '0.88rem', cursor: 'pointer', textDecoration: 'underline' }}>
+              ✨ 샘플 보고서 문서로 바로 체험해보기
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // --- PDF VIEWER COMPONENT ---
+    function PdfViewer({ currentDoc, activePage, onSelectPage, onAskAboutPage }) {
+      const [searchTerm, setSearchTerm] = useState('');
+      const pageRefs = useRef({});
+
+      useEffect(() => {
+        if (activePage && pageRefs.current[activePage]) {
+          pageRefs.current[activePage].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, [activePage]);
+
+      const filteredPages = currentDoc.pages.filter(p => !searchTerm || p.text.toLowerCase().includes(searchTerm.toLowerCase()));
+
+      return (
+        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+          <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', background: 'rgba(15, 23, 42, 0.6)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Icon name="book-open" size={18} color="#818cf8" />
+                <h3 style={{ fontSize: '1rem', fontWeight: '600', margin: 0 }}>PDF 문서 본문 뷰어</h3>
+              </div>
+              <span className="badge badge-indigo">{filteredPages.length} / {currentDoc.numPages} 페이지</span>
+            </div>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                placeholder="문서 내 키워드 검색..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ width: '100%', padding: '0.5rem 0.75rem 0.5rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.25)', color: '#fff', fontSize: '0.85rem', outline: 'none' }}
+              />
+            </div>
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {filteredPages.map(page => {
+              const isSelected = activePage === page.pageNum;
+              return (
+                <div
+                  key={page.pageNum}
+                  ref={el => pageRefs.current[page.pageNum] = el}
+                  onClick={() => onSelectPage(page.pageNum)}
+                  style={{
+                    borderRadius: '12px',
+                    border: isSelected ? '2px solid #818cf8' : '1px solid var(--border-color)',
+                    background: isSelected ? 'rgba(99, 102, 241, 0.12)' : 'rgba(15, 23, 42, 0.4)',
+                    boxShadow: isSelected ? '0 0 20px rgba(99, 102, 241, 0.3)' : 'none',
+                    padding: '1.25rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                    <span className="badge badge-indigo">페이지 {page.pageNum}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onAskAboutPage(page.pageNum); }}
+                      className="btn-secondary"
+                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', borderRadius: '6px' }}
+                    >
+                      💬 이 페이지 질문
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '0.88rem', lineHeight: 1.6, color: isSelected ? '#fff' : 'var(--text-sub)', whiteSpace: 'pre-wrap', maxHeight: '250px', overflowY: 'auto', background: 'rgba(0,0,0,0.2)', padding: '0.85rem', borderRadius: '8px' }}>
+                    {page.text}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // --- CHAT INTERFACE COMPONENT ---
+    function ChatInterface({ currentDoc, apiKey, onSelectPage, chatMessages, setChatMessages }) {
+      const [inputQuery, setInputQuery] = useState('');
+      const [isLoading, setIsLoading] = useState(false);
+      const chatEndRef = useRef(null);
+
+      useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, [chatMessages, isLoading]);
+
+      const handleSend = async (textToSend) => {
+        const query = textToSend || inputQuery;
+        if (!query || !query.trim() || isLoading) return;
+
+        const userMsg = { sender: 'user', text: query, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+        setChatMessages(prev => [...prev, userMsg]);
+        if (!textToSend) setInputQuery('');
+
+        setIsLoading(true);
+        try {
+          const res = await askPdfQuestion(query, currentDoc, apiKey);
+          setChatMessages(prev => [...prev, {
+            sender: 'ai',
+            text: res.answer,
+            sources: res.sources,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }]);
+        } catch (e) {
+          setChatMessages(prev => [...prev, { sender: 'ai', text: '오류가 발생했습니다.', sources: [] }]);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      return (
+        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+          <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="bot" size={16} color="#fff" />
+              </div>
+              <h3 style={{ fontSize: '1rem', fontWeight: '600', margin: 0 }}>AI 문서 어시스턴트</h3>
+            </div>
+            <button onClick={() => setChatMessages([])} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.78rem' }}>초기화</button>
+          </div>
+
+          {/* Action Chips */}
+          <div style={{ padding: '0.65rem 1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '0.5rem', overflowX: 'auto' }}>
+            <button onClick={() => handleSend('이 문서의 핵심 내용을 3줄로 요약해 줘')} disabled={isLoading} className="btn-secondary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.7rem', borderRadius: '20px' }}>⚡ 3줄 핵심 요약</button>
+            <button onClick={() => handleSend('이 문서에서 가장 중요한 키워드와 주제를 정리해 줘')} disabled={isLoading} className="btn-secondary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.7rem', borderRadius: '20px' }}>🔑 주요 키워드</button>
+            <button onClick={() => handleSend('문서 내용 기반 중요 Q&A 3개를 만들어 줘')} disabled={isLoading} className="btn-secondary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.7rem', borderRadius: '20px' }}>❓ 예상 Q&A</button>
+          </div>
+
+          {/* Message List */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {chatMessages.length === 0 ? (
+              <div style={{ textAlign: 'center', margin: 'auto', padding: '2rem 1rem' }}>
+                <h4 style={{ fontSize: '1.1rem', fontWeight: '600', marginBottom: '0.4rem' }}>무엇이든 물어보세요!</h4>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>PDF 문서의 내용을 기반으로 답변하고 출처 페이지를 알려드립니다.</p>
+              </div>
+            ) : (
+              chatMessages.map((msg, i) => (
+                <div key={i} style={{ display: 'flex', gap: '0.75rem', flexDirection: msg.sender === 'user' ? 'row-reverse' : 'row' }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: msg.sender === 'user' ? '#3b82f6' : '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icon name={msg.sender === 'user' ? 'user' : 'bot'} size={16} color="#fff" />
+                  </div>
+                  <div style={{ maxWidth: '85%' }}>
+                    <div style={{ padding: '0.85rem 1.1rem', borderRadius: '16px', background: msg.sender === 'user' ? '#4f46e5' : 'rgba(30, 41, 59, 0.8)', border: '1px solid var(--border-color)', fontSize: '0.9rem', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                      {msg.text}
+                      {msg.sources && msg.sources.length > 0 && (
+                        <div style={{ marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>참고 출처:</span>
+                          {msg.sources.map(p => (
+                            <button key={p} onClick={() => onSelectPage(p)} className="badge badge-indigo" style={{ cursor: 'pointer', border: 'none' }}>
+                              📄 p.{p} 이동
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+            {isLoading && <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>답변을 생성 중입니다...</div>}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Form */}
+          <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)', background: 'rgba(15, 23, 42, 0.8)' }}>
+            <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} style={{ display: 'flex', gap: '0.5rem' }}>
+              <input
+                type="text"
+                placeholder="이 PDF 문서에 대해 궁금한 점을 입력하세요..."
+                value={inputQuery}
+                onChange={(e) => setInputQuery(e.target.value)}
+                disabled={isLoading}
+                style={{ flex: 1, padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '0.9rem', outline: 'none' }}
+              />
+              <button type="submit" disabled={!inputQuery.trim() || isLoading} className="btn-primary" style={{ padding: '0.75rem 1.25rem' }}>
+                <span>전송</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // --- API KEY MODAL ---
+    function ApiKeyModal({ isOpen, onClose, apiKey, onSaveApiKey }) {
+      const [inputKey, setInputKey] = useState(apiKey || '');
+      if (!isOpen) return null;
+
+      return (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div className="glass-panel" style={{ maxWidth: '500px', width: '100%', padding: '1.75rem', borderRadius: '20px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '1rem' }}>Gemini API 키 설정</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>Google AI Studio에서 무료 API 키를 발급받아 입력하시면 더 자연스럽고 강력한 질의응답이 가능합니다.</p>
+            <input
+              type="password"
+              placeholder="AIzaSy..."
+              value={inputKey}
+              onChange={(e) => setInputKey(e.target.value)}
+              style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '0.9rem', marginBottom: '1.25rem', outline: 'none' }}
+            />
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button onClick={onClose} className="btn-secondary">취소</button>
+              <button onClick={() => { onSaveApiKey(inputKey.trim()); onClose(); }} className="btn-primary">저장</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- MAIN APP ---
+    function App() {
+      const [currentDoc, setCurrentDoc] = useState(null);
+      const [activePage, setActivePage] = useState(1);
+      const [chatMessages, setChatMessages] = useState([]);
+      const [apiKey, setApiKey] = useState(() => localStorage.getItem('smartpdf_api_key') || '');
+      const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+      const [isLoading, setIsLoading] = useState(false);
+
+      const handleSaveApiKey = (key) => {
+        setApiKey(key);
+        if (key) localStorage.setItem('smartpdf_api_key', key);
+        else localStorage.removeItem('smartpdf_api_key');
+      };
+
+      return (
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+          <Header
+            currentDoc={currentDoc}
+            onNewUpload={() => { setCurrentDoc(null); setChatMessages([]); }}
+            onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
+            apiKey={apiKey}
+          />
+          <main style={{ flex: 1, padding: '0 1.5rem 1.5rem', maxWidth: '1600px', width: '100%', margin: '0 auto' }}>
+            {!currentDoc ? (
+              <FileUpload
+                onDocumentLoaded={(doc) => { setCurrentDoc(doc); setActivePage(1); }}
+                setIsLoading={setIsLoading}
+                isLoading={isLoading}
+              />
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1.25rem', height: 'calc(100vh - 120px)', minHeight: '650px' }}>
+                <PdfViewer
+                  currentDoc={currentDoc}
+                  activePage={activePage}
+                  onSelectPage={(p) => setActivePage(p)}
+                  onAskAboutPage={(p) => {
+                    setActivePage(p);
+                    setChatMessages(prev => [...prev, { sender: 'user', text: `페이지 ${p}의 핵심 정보에 대해 알려줘.`, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+                  }}
+                />
+                <ChatInterface
+                  currentDoc={currentDoc}
+                  apiKey={apiKey}
+                  onSelectPage={(p) => setActivePage(p)}
+                  chatMessages={chatMessages}
+                  setChatMessages={setChatMessages}
+                />
+              </div>
+            )}
+          </main>
+          <ApiKeyModal
+            isOpen={isApiKeyModalOpen}
+            onClose={() => setIsApiKeyModalOpen(false)}
+            apiKey={apiKey}
+            onSaveApiKey={handleSaveApiKey}
+          />
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
